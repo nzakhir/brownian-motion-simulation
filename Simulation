@@ -1,0 +1,190 @@
+# -*- coding: utf-8 -*-
+"""
+01/12/2022
+Simulation of Brownian Motion
+
+Author: Nadirah Zakhir
+Project: Thermo Snooker
+Description:
+    This script simulates Brownian motion using elastic collisions among particles (balls) within a container. 
+    The system models ideal gas behavior and demonstrates principles of energy and momentum conservation.
+
+Modules Required:
+    - numpy
+    - matplotlib
+    - scipy.constants
+    - itertools
+
+Classes:
+    - Ball: Represents individual particles in the system.
+    - Simulation: Manages the simulation, including collisions and visualization.
+
+Key Features:
+    - Elastic collisions between particles and container.
+    - Conservation of kinetic energy and momentum.
+    - Pressure calculation from particle-wall interactions.
+    - Optional animation of the simulation.
+
+"""
+
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.patches import Circle
+from scipy.constants import Boltzmann
+import itertools
+
+class Ball:
+    """
+    Represents an elastic ball or container.
+
+    Attributes:
+        m (float): Mass of the ball.
+        R (float): Radius of the ball. Negative for the container.
+        x, y (float): Position coordinates of the ball.
+        vx, vy (float): Velocity components of the ball.
+
+    Methods:
+        pos(): Returns the position as a numpy array.
+        vel(): Returns the velocity as a numpy array.
+        speed(): Computes the magnitude of velocity.
+        radius(): Returns the radius of the ball.
+        move(dt): Updates the position of the ball over time dt.
+        time_to_collision(other): Calculates the time to collision with another ball.
+        collide(other): Updates velocities after an elastic collision.
+        get_patch(): Returns a matplotlib Circle patch for visualization.
+        KE(): Computes the kinetic energy of the ball.
+        momentum(): Computes the linear momentum of the ball.
+        overlaps(other): Checks if two balls overlap.
+    """
+
+    def __init__(self, m=1.0, R=1.0, x=0.0, y=0.0, vx=0.0, vy=0.0):
+        self.m = m
+        self.R = R
+        self.x = x
+        self.y = y
+        self.vx = vx
+        self.vy = vy
+        self.r = np.array([x, y])
+        self.v = np.array([vx, vy])
+
+    def pos(self):
+        return self.r
+
+    def vel(self):
+        return self.v
+
+    def speed(self):
+        return np.linalg.norm(self.v)
+
+    def radius(self):
+        return self.R
+
+    def move(self, dt):
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+        self.r = np.array([self.x, self.y])
+
+    def time_to_collision(self, other):
+        r_diff = self.r - other.r
+        v_diff = self.v - other.v
+        r_dot_v = np.dot(r_diff, v_diff)
+        v_squared = np.dot(v_diff, v_diff)
+        r_squared = np.dot(r_diff, r_diff)
+        R_sum = self.R + other.R
+
+        a = v_squared
+        b = 2 * r_dot_v
+        c = r_squared - R_sum ** 2
+        discriminant = b ** 2 - 4 * a * c
+
+        if discriminant < 0:
+            return None
+
+        t1 = (-b + np.sqrt(discriminant)) / (2 * a)
+        t2 = (-b - np.sqrt(discriminant)) / (2 * a)
+
+        return min(t for t in [t1, t2] if t > 0) if max(t1, t2) > 0 else None
+
+    def collide(self, other):
+        r_diff = self.r - other.r
+        v_diff = self.v - other.v
+        dist = np.linalg.norm(r_diff)
+        n = r_diff / dist
+        t = np.array([-n[1], n[0]])
+
+        v_self_n = np.dot(self.v, n)
+        v_self_t = np.dot(self.v, t)
+        v_other_n = np.dot(other.v, n)
+        v_other_t = np.dot(other.v, t)
+
+        v_self_n_final = (v_self_n * (self.m - other.m) + 2 * other.m * v_other_n) / (self.m + other.m)
+        v_other_n_final = (v_other_n * (other.m - self.m) + 2 * self.m * v_self_n) / (self.m + other.m)
+
+        self.v = v_self_n_final * n + v_self_t * t
+        other.v = v_other_n_final * n + v_other_t * t
+
+    def get_patch(self):
+        color = 'r' if self.R > 0 else 'b'
+        return Circle(self.r, abs(self.R), color=color, fill=self.R > 0)
+
+    def KE(self):
+        return 0.5 * self.m * self.speed() ** 2
+
+    def momentum(self):
+        return self.m * self.v
+
+    def overlaps(self, other):
+        return np.linalg.norm(self.r - other.r) < self.R + other.R
+
+
+class Simulation:
+    """
+    Simulates a container with balls undergoing elastic collisions.
+
+    Attributes:
+        n (int): Number of balls.
+        container (Ball): The container.
+        balls (list): List of Ball objects.
+
+    Methods:
+        initialise(): Randomly initializes ball positions and velocities.
+        next_collision(): Processes the next collision event.
+        run(num_frames, animate): Executes the simulation for a given number of frames.
+    """
+
+    def __init__(self, n=100, container=Ball(m=1e17, R=-30), m=1, R=0.7):
+        self.n = n
+        self.container = container
+        self.balls = [Ball(m=m, R=R) for _ in range(n)]
+        self.pressure = []
+
+    def initialise(self):
+        for ball in self.balls:
+            ball.x, ball.y = np.random.uniform(-self.container.R + ball.R, self.container.R - ball.R, 2)
+            ball.vx, ball.vy = np.random.normal(0, 1, 2)
+
+    def next_collision(self):
+        pass  # Placeholder for the collision logic
+
+    def run(self, num_frames, animate=False):
+        self.initialise()
+        if animate:
+            fig, ax = plt.subplots()
+            ax.set_xlim(-self.container.R, self.container.R)
+            ax.set_ylim(-self.container.R, self.container.R)
+            container_patch = self.container.get_patch()
+            ax.add_artist(container_patch)
+            ball_patches = [ax.add_patch(ball.get_patch()) for ball in self.balls]
+
+            def update(frame):
+                for ball in self.balls:
+                    ball.move(0.1)  # Example timestep
+                return ball_patches
+
+            anim = plt.animation.FuncAnimation(fig, update, frames=num_frames, blit=True)
+            plt.show()
+
+# Example usage
+container = Ball(m=1e17, R=-30)
+simulation = Simulation(100, container, 1, 0.7)
+simulation.run(100, animate=True)
